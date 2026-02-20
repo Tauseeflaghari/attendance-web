@@ -81,14 +81,14 @@
     import { getDatabase, ref, set, get, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
-    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
-    authDomain: "attendance-system-123.firebaseapp.com",
-    projectId: "attendance-system-123",
-    storageBucket: "attendance-system-123.firebasestorage.app",
-    messagingSenderId: "592694519186",
-    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
-    measurementId: "G-TWE5VVT6ZQ"
-  };
+        apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+        authDomain: "attendance-system-123.firebaseapp.com",
+        projectId: "attendance-system-123",
+        storageBucket: "attendance-system-123.firebasestorage.app",
+        messagingSenderId: "592694519186",
+        appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+        measurementId: "G-TWE5VVT6ZQ"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
@@ -96,7 +96,8 @@
     let selectedDays = [];
     let lockedSchedules = {};
 
-    // Load Classes from Firebase
+    // --- Core Functions ---
+
     async function fetchClasses() {
         const classRef = ref(db, 'cui_classes');
         const snapshot = await get(classRef);
@@ -129,13 +130,15 @@
         lockedSchedules = {};
         document.querySelectorAll('.day-box').forEach(b => b.classList.remove('selected'));
         document.getElementById('timeInputs').innerHTML = '';
+        document.getElementById('className').value = '';
+        document.getElementById('roomNo').value = '';
     };
 
     document.getElementById('closeModalBtn').onclick = () => {
         document.getElementById('classModal').style.display = 'none';
     };
 
-    // Toggle Day & Render Time with 'SET' button logic
+    // Toggle Day Box logic
     document.querySelectorAll('.day-box').forEach(box => {
         box.onclick = function() {
             const day = this.dataset.day;
@@ -172,21 +175,49 @@
         });
     }
 
+    // --- Global Window Functions (for HTML onclick access) ---
+
     window.lockTime = (day) => {
-        const from = document.getElementById(`from-${day}`).value;
-        const to = document.getElementById(`to-${day}`).value;
+        const fromInput = document.getElementById(`from-${day}`);
+        const toInput = document.getElementById(`to-${day}`);
+        const from = fromInput.value;
+        const to = toInput.value;
+        
         if(!from || !to) return alert("Please select time first!");
         
         lockedSchedules[day] = { from, to };
         renderTimeInputs();
     };
 
-    // Save to Firebase
+    window.enterClass = (id) => {
+        localStorage.setItem('current_class_id', id);
+        window.location.href = 'teacher_dashboard.html';
+    };
+
+    window.deleteClass = async (e, id) => {
+        e.stopPropagation();
+        if(confirm("Confirm Delete? This cannot be undone.")) {
+            try {
+                await remove(ref(db, `cui_classes/${id}`));
+                fetchClasses();
+            } catch (err) {
+                alert("Error deleting: " + err.message);
+            }
+        }
+    };
+
+    // --- Create Class Action ---
+
     document.getElementById('confirmCreateBtn').onclick = async () => {
-        const name = document.getElementById('className').value.trim();
-        const room = document.getElementById('roomNo').value.trim();
+        const nameInput = document.getElementById('className');
+        const roomInput = document.getElementById('roomNo');
+        const name = nameInput.value.trim();
+        const room = roomInput.value.trim();
         
         if(!name || !room) return alert("Class Name and Room are required!");
+        if(selectedDays.length === 0) return alert("Please select at least one day!");
+        
+        // Check if all selected days are "Set"
         if(Object.keys(lockedSchedules).length !== selectedDays.length) {
             return alert("Please click the 'CONFIRM TIME' button for all selected days!");
         }
@@ -205,24 +236,17 @@
             students: []
         };
 
-        await set(ref(db, `cui_classes/${classId}`), newClass);
-        document.getElementById('classModal').style.display = 'none';
-        fetchClasses();
-    };
-
-    window.enterClass = (id) => {
-        localStorage.setItem('current_class_id', id);
-        window.location.href = 'teacher_dashboard.html';
-    };
-
-    window.deleteClass = async (e, id) => {
-        e.stopPropagation();
-        if(confirm("Confirm Delete? This cannot be undone.")) {
-            await remove(ref(db, `cui_classes/${id}`));
+        try {
+            await set(ref(db, `cui_classes/${classId}`), newClass);
+            document.getElementById('classModal').style.display = 'none';
             fetchClasses();
+            alert("Class Created Successfully!");
+        } catch (err) {
+            alert("Firebase Error: " + err.message);
         }
     };
 
+    // Load initial data
     window.onload = fetchClasses;
 </script>
 </body>
