@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Console | CUI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        
+        body { 
+            min-height: 100vh; background: linear-gradient(180deg, #0f172a, #020617); 
+            color: white; display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+
+        .display-container {
+            width: 100%; max-width: 500px; padding: 40px; border-radius: 30px;
+            background: rgba(255,255,255,0.03); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1); text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        h2 { font-weight: 800; background: linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip: text; color: transparent; margin-bottom: 30px; }
+
+        .inp { 
+            width: 100%; padding: 14px; margin-bottom: 20px; border-radius: 12px; 
+            border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); 
+            color: white; outline: none; text-align: center; font-size: 16px;
+        }
+
+        .captcha-row { 
+            display: flex; align-items: center; gap: 15px; padding: 15px; 
+            background: rgba(255,255,255,0.05); border-radius: 15px; margin-bottom: 25px; 
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.1); transition: 0.3s;
+        }
+        .captcha-row:hover { background: rgba(255,255,255,0.08); }
+        #tickBox { 
+            width: 24px; height: 24px; border: 2px solid #38bdf8; border-radius: 6px; 
+            display: flex; align-items: center; justify-content: center; color: #38bdf8; font-weight: bold;
+        }
+
+        .btn-open { 
+            width: 100%; padding: 15px; border-radius: 50px; background: #38bdf8; 
+            color: #020617; border: none; cursor: pointer; font-weight: 800; font-size: 16px; 
+            transition: 0.4s;
+        }
+        .btn-open:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(56, 189, 248, 0.4); }
+
+        #studentView { display: none; }
+        .stat-card { background: rgba(255,255,255,0.05); padding: 25px; border-radius: 20px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        .perc-display { font-size: 55px; font-weight: 800; margin: 10px 0; }
+        
+        .history-item { 
+            display: flex; justify-content: space-between; padding: 12px; 
+            border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loginArea" class="display-container">
+        <h2>STUDENT PORTAL</h2>
+        <input type="text" id="sreg" class="inp" placeholder="REG NO (FA25-BCS-103)" oninput="this.value = this.value.toUpperCase()">
+        
+        <div class="captcha-row" onclick="verifyRobot()">
+            <div id="tickBox"></div>
+            <span style="font-size: 14px; color: #94a3b8;">I am not a robot</span>
+        </div>
+
+        <button class="btn-open" id="loginBtn">VIEW ATTENDANCE</button>
+        <p style="margin-top:20px"><a href="index.html" style="color: #64748b; text-decoration: none; font-size: 14px;">← Back to Home</a></p>
+    </div>
+
+    <div id="studentView" class="display-container" style="max-width: 600px;">
+        <h3 id="welcomeMsg" style="color: #38bdf8; margin-bottom: 5px;">Welcome!</h3>
+        <p id="regInfo" style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;"></p>
+        
+        <div class="stat-card">
+            <div class="perc-display" id="percValue">0%</div>
+            <p style="color: #94a3b8; font-size: 14px;">Overall Attendance Percentage</p>
+        </div>
+
+        <div style="text-align: left; margin-top: 20px;">
+            <h4 style="margin-bottom: 15px; border-left: 3px solid #38bdf8; padding-left: 10px;">Detailed History</h4>
+            <div id="historyContainer" style="max-height: 250px; overflow-y: auto;"></div>
+        </div>
+
+        <button class="btn-open" style="margin-top: 30px; background: transparent; border: 1px solid #f472b6; color: #f472b6;" onclick="location.reload()">LOGOUT</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let robotVerified = false;
+
+        window.verifyRobot = function() {
+            robotVerified = !robotVerified;
+            document.getElementById('tickBox').innerHTML = robotVerified ? "✔" : "";
+            document.getElementById('tickBox').style.background = robotVerified ? "rgba(56, 189, 248, 0.1)" : "transparent";
+        }
+
+        async function loginStudent() {
+            if(!robotVerified) return alert("Please confirm you are not a robot!");
+
+            const regInput = document.getElementById('sreg').value.trim();
+            if(!regInput) return alert("Please enter Registration Number!");
+
+            // Fetch all classes to find the student (Fraction of second search)
+            const classesRef = ref(db, 'cui_classes');
+            const snapshot = await get(classesRef);
+
+            if(!snapshot.exists()) return alert("No records found in database.");
+
+            let studentFound = null;
+            const allClasses = snapshot.val();
+
+            // Searching student across all classes
+            for(let id in allClasses) {
+                if(allClasses[id].students) {
+                    const found = allClasses[id].students.find(s => s.reg === regInput);
+                    if(found) {
+                        studentFound = found;
+                        break;
+                    }
+                }
+            }
+
+            if(!studentFound) {
+                alert("This Registration Number is not in our records. Please contact your teacher.");
+                return;
+            }
+
+            // Calculation
+            const history = studentFound.history || [];
+            const total = history.length;
+            const present = history.filter(h => h.status === 'P').length;
+            const perc = total > 0 ? Math.round((present / total) * 100) : 0;
+
+            // UI Switch
+            document.getElementById('loginArea').style.display = 'none';
+            document.getElementById('studentView').style.display = 'block';
+            
+            document.getElementById('welcomeMsg').innerText = "Welcome, " + studentFound.name;
+            document.getElementById('regInfo').innerText = "Registration: " + studentFound.reg;
+            
+            const percEl = document.getElementById('percValue');
+            percEl.innerText = perc + "%";
+            percEl.style.color = perc >= 80 ? "#22c55e" : "#ef4444";
+
+            // History Container
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '';
+            
+            if(history.length === 0) {
+                container.innerHTML = "<p style='color:#64748b; text-align:center;'>No attendance records found yet.</p>";
+            } else {
+                history.slice().reverse().forEach(entry => {
+                    const statusColor = entry.status === 'P' ? "#22c55e" : "#ef4444";
+                    container.innerHTML += `
+                        <div class="history-item">
+                            <span>${entry.date}</span>
+                            <span style="color: ${statusColor}; font-weight: 800;">${entry.status === 'P' ? 'PRESENT' : 'ABSENT'}</span>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        document.getElementById('loginBtn').onclick = loginStudent;
+    </script>
+</body>
+</html>

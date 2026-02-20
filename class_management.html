@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Classes | CUI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { min-height: 100vh; background: #0f172a; color: white; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .btn-create { background: #7f5af0; color: white; border: none; padding: 12px 25px; border-radius: 12px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-create:hover { background: #6b46e5; transform: scale(1.02); }
+
+        /* Modal Styling */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: #1e293b; padding: 30px; border-radius: 25px; width: 90%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); max-height: 90vh; overflow-y: auto; }
+        
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #020617; color: white; outline: none; }
+        .days-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
+        .day-box { background: #334155; padding: 10px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 13px; transition: 0.3s; }
+        .day-box.selected { background: #7f5af0; box-shadow: 0 0 15px rgba(127, 90, 240, 0.4); }
+
+        .time-entry { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-top: 10px; border-left: 4px solid #7f5af0; }
+        .set-btn { background: #2cb67d; color: #000; border: none; padding: 5px 10px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 11px; }
+        .set-btn.locked { background: #64748b; cursor: default; }
+
+        /* Class Cards */
+        .class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .class-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 25px; border-radius: 20px; color: white; transition: 0.3s; position: relative; cursor: pointer; }
+        .class-card:hover { transform: translateY(-5px); border-color: #7f5af0; background: rgba(127, 90, 240, 0.05); }
+        .class-card h3 { color: #7f5af0; margin-bottom: 10px; font-size: 22px; }
+        .class-card p { font-size: 14px; color: #94a3b8; margin: 5px 0; }
+        
+        .btn-delete-class { position: absolute; top: 15px; right: 15px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div>
+            <h1 style="color: #7f5af0;">CUI Portal</h1>
+            <p style="color: #64748b; font-size: 14px;">Class Management</p>
+        </div>
+        <button class="btn-create" id="openModalBtn">+ Create New Class</button>
+    </div>
+
+    <div id="classGrid" class="class-grid">
+        <p style="text-align: center; width: 100%;">Loading classes...</p>
+    </div>
+</div>
+
+<div id="classModal" class="modal">
+    <div class="modal-content">
+        <h3>Create New Class</h3>
+        <input type="text" id="className" placeholder="Class Name (e.g., BCS-4A)">
+        <input type="text" id="roomNo" placeholder="Room No (e.g., G-06)">
+        
+        <p style="margin-top:15px; font-size:14px; color:#94a3b8;">Select Class Days:</p>
+        <div class="days-grid">
+            <div class="day-box" data-day="Monday">Mon</div>
+            <div class="day-box" data-day="Tuesday">Tue</div>
+            <div class="day-box" data-day="Wednesday">Wed</div>
+            <div class="day-box" data-day="Thursday">Thu</div>
+            <div class="day-box" data-day="Friday">Fri</div>
+            <div class="day-box" data-day="Saturday">Sat</div>
+        </div>
+
+        <div id="timeInputs"></div>
+
+        <div style="display:flex; gap:10px; margin-top:25px;">
+            <button class="btn-create" style="flex:2;" id="confirmCreateBtn">Confirm & Create</button>
+            <button id="closeModalBtn" style="flex:1; background:transparent; color:#94a3b8; border:none; cursor:pointer; font-weight:bold;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, get, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let selectedDays = [];
+    let lockedSchedules = {};
+
+    // Load Classes from Firebase
+    async function fetchClasses() {
+        const classRef = ref(db, 'cui_classes');
+        const snapshot = await get(classRef);
+        const grid = document.getElementById('classGrid');
+        grid.innerHTML = '';
+
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            Object.keys(data).forEach(id => {
+                const c = data[id];
+                const daysText = c.schedule.map(s => s.day.substring(0,3)).join(', ');
+                grid.innerHTML += `
+                    <div class="class-card" onclick="enterClass('${id}')">
+                        <button class="btn-delete-class" onclick="deleteClass(event, '${id}')">Delete</button>
+                        <h3>${c.className}</h3>
+                        <p><strong>Room:</strong> ${c.room}</p>
+                        <p><strong>Days:</strong> ${daysText}</p>
+                        <p style="margin-top:10px; color:#7f5af0; font-size:12px; font-weight:bold;">OPEN DASHBOARD →</p>
+                    </div>`;
+            });
+        } else {
+            grid.innerHTML = `<p style="text-align:center; color:#64748b; grid-column:1/-1;">No classes found.</p>`;
+        }
+    }
+
+    // Modal Control
+    document.getElementById('openModalBtn').onclick = () => {
+        document.getElementById('classModal').style.display = 'flex';
+        selectedDays = [];
+        lockedSchedules = {};
+        document.querySelectorAll('.day-box').forEach(b => b.classList.remove('selected'));
+        document.getElementById('timeInputs').innerHTML = '';
+    };
+
+    document.getElementById('closeModalBtn').onclick = () => {
+        document.getElementById('classModal').style.display = 'none';
+    };
+
+    // Toggle Day & Render Time with 'SET' button logic
+    document.querySelectorAll('.day-box').forEach(box => {
+        box.onclick = function() {
+            const day = this.dataset.day;
+            this.classList.toggle('selected');
+            if(this.classList.contains('selected')) {
+                selectedDays.push(day);
+            } else {
+                selectedDays = selectedDays.filter(d => d !== day);
+                delete lockedSchedules[day];
+            }
+            renderTimeInputs();
+        };
+    });
+
+    function renderTimeInputs() {
+        const container = document.getElementById('timeInputs');
+        container.innerHTML = '';
+        selectedDays.forEach(day => {
+            const isLocked = lockedSchedules[day];
+            container.innerHTML += `
+                <div class="time-entry">
+                    <div style="display:flex; justify-content:space-between;">
+                        <strong style="color:#7f5af0; font-size:12px;">${day}</strong>
+                        <button class="set-btn ${isLocked ? 'locked' : ''}" onclick="window.lockTime('${day}')">
+                            ${isLocked ? '✓ SET' : 'CONFIRM TIME'}
+                        </button>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; margin-top:5px;">
+                        <input type="time" id="from-${day}" ${isLocked ? 'disabled' : ''} value="${isLocked ? lockedSchedules[day].from : ''}">
+                        <span style="color:#64748b; font-size:12px;">to</span>
+                        <input type="time" id="to-${day}" ${isLocked ? 'disabled' : ''} value="${isLocked ? lockedSchedules[day].to : ''}">
+                    </div>
+                </div>`;
+        });
+    }
+
+    window.lockTime = (day) => {
+        const from = document.getElementById(`from-${day}`).value;
+        const to = document.getElementById(`to-${day}`).value;
+        if(!from || !to) return alert("Please select time first!");
+        
+        lockedSchedules[day] = { from, to };
+        renderTimeInputs();
+    };
+
+    // Save to Firebase
+    document.getElementById('confirmCreateBtn').onclick = async () => {
+        const name = document.getElementById('className').value.trim();
+        const room = document.getElementById('roomNo').value.trim();
+        
+        if(!name || !room) return alert("Class Name and Room are required!");
+        if(Object.keys(lockedSchedules).length !== selectedDays.length) {
+            return alert("Please click the 'CONFIRM TIME' button for all selected days!");
+        }
+
+        const classId = "class_" + Date.now();
+        const scheduleArray = Object.keys(lockedSchedules).map(day => ({
+            day, 
+            from: lockedSchedules[day].from, 
+            to: lockedSchedules[day].to
+        }));
+
+        const newClass = {
+            className: name.toUpperCase(),
+            room: room,
+            schedule: scheduleArray,
+            students: []
+        };
+
+        await set(ref(db, `cui_classes/${classId}`), newClass);
+        document.getElementById('classModal').style.display = 'none';
+        fetchClasses();
+    };
+
+    window.enterClass = (id) => {
+        localStorage.setItem('current_class_id', id);
+        window.location.href = 'teacher_dashboard.html';
+    };
+
+    window.deleteClass = async (e, id) => {
+        e.stopPropagation();
+        if(confirm("Confirm Delete? This cannot be undone.")) {
+            await remove(ref(db, `cui_classes/${id}`));
+            fetchClasses();
+        }
+    };
+
+    window.onload = fetchClasses;
+</script>
+</body>
+</html>

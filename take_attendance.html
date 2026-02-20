@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Take Attendance | CUI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: rgba(255,255,255,0.03); padding: 30px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        
+        .date-section { margin-bottom: 25px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; }
+        input[type="date"] { 
+            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; 
+            background: #020617; color: white; outline: none; font-size: 16px; 
+        }
+
+        .white-box { background: white; padding: 10px; border-radius: 12px; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; color: #1e293b; background: white; }
+        th { background: #f1f5f9; border: 2px solid #cbd5e1; padding: 12px; color: #0f172a; font-weight: 800; }
+        td { border: 1px solid #cbd5e1; padding: 12px; text-align: center; font-weight: 600; }
+        
+        .btn-group { display: flex; justify-content: center; gap: 10px; }
+        
+        .status-btn {
+            width: 40px; height: 40px; border-radius: 8px; border: 2px solid #e2e8f0;
+            background: white; color: #64748b; font-weight: 800; cursor: pointer;
+            transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;
+        }
+
+        .status-btn.p-active { background: #22c55e !important; color: white !important; border-color: #16a34a !important; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.3); }
+        .status-btn.a-active { background: #ef4444 !important; color: white !important; border-color: #dc2626 !important; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+
+        .btn-load { width: 100%; padding: 15px; background: #7f5af0; color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 800; margin-bottom: 10px; }
+        .btn-submit { width: 100%; padding: 18px; background: #2cb67d; color: #000; border: none; border-radius: 12px; cursor: pointer; font-weight: 800; margin-top: 25px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="teacher_dashboard.html" style="color:#7f5af0; text-decoration:none; font-weight: bold;">← Back</a>
+        <h2 style="margin: 20px 0; color: #2cb67d;">Mark Attendance</h2>
+        
+        <div class="date-section">
+            <input type="date" id="attDate" min="2025-01-01">
+        </div>
+
+        <button class="btn-load" id="loadBtn">LOAD STUDENT LIST</button>
+        
+        <div class="white-box" id="tableContainer" style="display:none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Sr.</th>
+                        <th>Student Name</th>
+                        <th>Reg No</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tb"></tbody>
+            </table>
+        </div>
+
+        <button id="submitBtn" class="btn-submit" style="display:none;">SAVE ATTENDANCE</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const currentClassId = localStorage.getItem('current_class_id');
+        let currentStudents = [];
+
+        // Load List Function
+        async function loadList() {
+            const dateVal = document.getElementById('attDate').value;
+            if(!dateVal) return alert("Pehle date select karein!");
+            if(dateVal.split('-')[0] < 2025) return alert("Year 2025 onwards allowed!");
+
+            const classRef = ref(db, `cui_classes/${currentClassId}/students`);
+            const snapshot = await get(classRef);
+
+            if(!snapshot.exists()) return alert('No students found in this class!');
+            
+            currentStudents = snapshot.val();
+            document.getElementById('tableContainer').style.display = 'block';
+            document.getElementById('submitBtn').style.display = 'block';
+            
+            let html = '';
+            currentStudents.forEach((s, i) => {
+                html += `<tr id="r${i}" data-status="">
+                    <td>${i+1}</td>
+                    <td style="text-align:left; padding-left:20px;">${s.name}</td>
+                    <td>${s.reg}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button id="p${i}" class="status-btn" data-idx="${i}" data-type="P">P</button>
+                            <button id="a${i}" class="status-btn" data-idx="${i}" data-type="A">A</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+            document.getElementById('tb').innerHTML = html;
+
+            // Add Event Listeners to status buttons
+            document.querySelectorAll('.status-btn').forEach(btn => {
+                btn.onclick = () => markRow(btn.dataset.idx, btn.dataset.type);
+            });
+        }
+
+        window.markRow = function(idx, status) {
+            const btnP = document.getElementById('p' + idx);
+            const btnA = document.getElementById('a' + idx);
+            const row = document.getElementById('r' + idx);
+
+            btnP.classList.remove('p-active');
+            btnA.classList.remove('a-active');
+
+            if(status === 'P') { btnP.classList.add('p-active'); } 
+            else { btnA.classList.add('a-active'); }
+
+            row.setAttribute('data-status', status);
+        }
+
+        async function saveAttendance() {
+            const dateVal = document.getElementById('attDate').value;
+            const d = dateVal.split('-');
+            const formattedDate = `${d[2]}-${d[1]}-${d[0]}`;
+
+            let allMarked = true;
+            currentStudents.forEach((s, i) => {
+                let currentStatus = document.getElementById('r'+i).getAttribute('data-status');
+                if(!currentStatus) { allMarked = false; }
+                
+                if(!s.history) s.history = [];
+                s.history.push({date: formattedDate, status: currentStatus || 'A'});
+            });
+
+            if(!allMarked) {
+                if(!confirm("Kuch students mark nahi kiye gaye, unhe Absent 'A' tasawar kiya jayega. Continue?")) return;
+            }
+
+            try {
+                const studentsRef = ref(db, `cui_classes/${currentClassId}/students`);
+                await set(studentsRef, currentStudents);
+                alert('Attendance saved successfully on Cloud for ' + formattedDate);
+                location.href = 'teacher_dashboard.html';
+            } catch (e) {
+                alert("Error saving: " + e.message);
+            }
+        }
+
+        document.getElementById('loadBtn').onclick = loadList;
+        document.getElementById('submitBtn').onclick = saveAttendance;
+    </script>
+</body>
+</html>

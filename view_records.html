@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Records | CUI</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 1000px; margin: auto; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        
+        .filter-section { max-width: 1000px; margin: 0 auto 20px auto; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px; }
+        select { padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #020617; color: white; outline: none; cursor: pointer; min-width: 200px; }
+
+        .white-report { background: white; padding: 20px; border-radius: 15px; max-width: 1000px; margin: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        table { width: 100%; border-collapse: collapse; color: #1e293b; }
+        th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 15px; color: #000; text-transform: uppercase; font-size: 11px; }
+        td { border: 1px solid #e2e8f0; padding: 10px; text-align: center; font-size: 14px; }
+        tr:nth-child(even) { background: #f8fafc; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        .btn-pdf { background: #2cb67d; color: #000; border: none; padding: 10px 20px; border-radius: 50px; font-weight: 800; cursor: pointer; }
+        .btn-img { background: #7f5af0; color: white; border: none; padding: 10px 20px; border-radius: 50px; font-weight: 800; cursor: pointer; }
+
+        .status-circle {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 50%; color: white; font-weight: bold; font-size: 12px;
+        }
+        .bg-p { background: #22c55e; }
+        .bg-a { background: #ef4444; }
+
+        .perc-text { font-weight: 800; }
+        .perc-red { color: #ef4444; }
+        .perc-green { color: #22c55e; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="teacher_dashboard.html" style="color:#7f5af0; text-decoration:none; font-weight:bold;">← Back</a>
+        <div class="btn-group">
+            <button class="btn-pdf" id="pdfBtn">PDF</button>
+            <button class="btn-img" id="imgBtn">IMAGE</button>
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span id="classInfo">Loading class data...</span>
+        <select id="dateFilter">
+            <option value="">-- Select Date --</option>
+        </select>
+    </div>
+
+    <div class="white-report" id="reportArea">
+        <h2 id="reportTitle" style="color:#0f172a; text-align:center; display:none; margin-bottom:20px;">Attendance Report</h2>
+        <table id="rtable">
+            <thead>
+                <tr>
+                    <th style="width:50px;">Sr No</th>
+                    <th>Student Name</th>
+                    <th>Registration No</th>
+                    <th>Status</th>
+                    <th class="no-export">Total %</th>
+                </tr>
+            </thead>
+            <tbody id="rbody">
+                <tr><td colspan="5" style="padding:40px; color:#64748b;">Loading records...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const currentClassId = localStorage.getItem('current_class_id');
+        let currentClassData = null;
+        let studentsList = [];
+
+        window.onload = async function() {
+            if(!currentClassId) {
+                alert("No class selected!");
+                window.location.href = 'class_management.html';
+                return;
+            }
+
+            const classRef = ref(db, `cui_classes/${currentClassId}`);
+            const snapshot = await get(classRef);
+
+            if(snapshot.exists()) {
+                currentClassData = snapshot.val();
+                studentsList = currentClassData.students || [];
+                document.getElementById('classInfo').innerText = "Report for: " + currentClassData.className;
+                
+                // Populate Dates Dropdown
+                let dates = new Set();
+                studentsList.forEach(s => {
+                    if(s.history) s.history.forEach(entry => dates.add(entry.date));
+                });
+                
+                let dropdown = document.getElementById('dateFilter');
+                dates.forEach(d => {
+                    let opt = document.createElement('option');
+                    opt.value = d; opt.innerText = d;
+                    dropdown.appendChild(opt);
+                });
+
+                document.getElementById('rbody').innerHTML = '<tr><td colspan="5" style="padding:40px; color:#64748b;">Please select a date to view records.</td></tr>';
+            }
+        };
+
+        function calculatePercentage(history) {
+            if (!history || history.length === 0) return 0;
+            let presentCount = history.filter(h => h.status === 'P').length;
+            return Math.round((presentCount / history.length) * 100);
+        }
+
+        window.renderTable = function() {
+            let filter = document.getElementById('dateFilter').value;
+            let h = '';
+            if(!filter) {
+                document.getElementById('rbody').innerHTML = '<tr><td colspan="5" style="padding:40px; color:#64748b;">Please select a date.</td></tr>';
+                return;
+            }
+
+            // Numeric sort for Reg No
+            studentsList.sort((a, b) => a.reg.localeCompare(b.reg, undefined, {numeric: true}));
+
+            let count = 1;
+            studentsList.forEach(s => {
+                let entry = s.history ? s.history.find(x => x.date === filter) : null;
+                if (entry) {
+                    let perc = calculatePercentage(s.history);
+                    let percCol = perc < 80 ? 'perc-red' : 'perc-green';
+
+                    h += `<tr>
+                        <td>${count++}</td>
+                        <td style="text-align:left; padding-left:15px;">${s.name}</td>
+                        <td style="color:#7f5af0; font-weight:bold;">${s.reg}</td>
+                        <td>
+                            <span class="status-circle ${entry.status=='P'?'bg-p':'bg-a'}">
+                                ${entry.status}
+                            </span>
+                        </td>
+                        <td class="no-export perc-text ${percCol}">${perc}%</td>
+                    </tr>`;
+                }
+            });
+            document.getElementById('rbody').innerHTML = h || '<tr><td colspan="5">No records found for this date.</td></tr>';
+        }
+
+        document.getElementById('dateFilter').onchange = renderTable;
+
+        // Export Functions
+        window.genPDF = function() {
+            let filterText = document.getElementById('dateFilter').value;
+            if(!filterText) return alert("Select Date!");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFontSize(16);
+            doc.text(currentClassData.className + " - Attendance Report", 14, 15);
+            doc.setFontSize(12);
+            doc.text("Date: " + filterText, 14, 22);
+            
+            doc.autoTable({ 
+                html: '#rtable', 
+                startY: 30, 
+                theme: 'grid',
+                headStyles: {fillColor: [127, 90, 240]},
+                columns: [
+                    {header: 'Sr No', dataKey: 0},
+                    {header: 'Student Name', dataKey: 1},
+                    {header: 'Reg No', dataKey: 2},
+                    {header: 'Status', dataKey: 3}
+                ]
+            });
+            doc.save(`${currentClassData.className}_${filterText}.pdf`);
+        }
+
+        window.genIMG = function() {
+            let filterText = document.getElementById('dateFilter').value;
+            if(!filterText) return alert("Select Date!");
+            
+            const area = document.getElementById('reportArea');
+            const title = document.getElementById('reportTitle');
+            const percCols = document.querySelectorAll('.no-export');
+            
+            percCols.forEach(c => c.style.display = 'none');
+            title.innerText = currentClassData.className + " - Report (" + filterText + ")";
+            title.style.display = "block";
+
+            html2canvas(area).then(canvas => {
+                let link = document.createElement('a');
+                link.download = `${currentClassData.className}_${filterText}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+                
+                title.style.display = "none";
+                percCols.forEach(c => c.style.display = '');
+            });
+        }
+
+        document.getElementById('pdfBtn').onclick = genPDF;
+        document.getElementById('imgBtn').onclick = genIMG;
+    </script>
+</body>
+</html>

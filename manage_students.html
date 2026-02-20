@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Students | CUI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { min-height: 100vh; background: #020617; color: white; padding: 20px; }
+        
+        .container { width: 100%; max-width: 850px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
+        .search-box { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; outline: none; }
+
+        .white-card { background: white; border-radius: 15px; overflow: hidden; color: #1e293b; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f1f5f9; padding: 15px; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; }
+        td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; }
+        
+        .edit-input { padding: 5px; border-radius: 4px; border: 1px solid #cbd5e1; width: 100%; outline: none; }
+
+        .btn-edit { background: #7f5af0; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-right: 5px; }
+        .btn-del { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+        .btn-save { background: #22c55e; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-right: 5px; }
+        .btn-cancel { background: #64748b; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <a href="teacher_dashboard.html" style="color:#7f5af0; text-decoration:none; font-weight:bold;">← Back Dashboard</a>
+            <h2 id="classHeading">Manage Records</h2>
+        </div>
+
+        <input type="text" id="search" class="search-box" placeholder="Search by Roll No or Name...">
+
+        <div class="white-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">S.No</th>
+                        <th>Reg No</th>
+                        <th>Student Name</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="studentTable">
+                    <tr><td colspan="4" style="text-align:center; padding:20px;">Loading student records...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const currentClassId = localStorage.getItem('current_class_id');
+        let studentsList = [];
+
+        // Initial Load
+        async function loadStudents() {
+            if(!currentClassId) {
+                window.location.href = 'class_management.html';
+                return;
+            }
+
+            const classRef = ref(db, `cui_classes/${currentClassId}`);
+            const snapshot = await get(classRef);
+
+            if(snapshot.exists()) {
+                const data = snapshot.val();
+                studentsList = data.students || [];
+                document.getElementById('classHeading').innerText = "Records: " + data.className;
+                renderList();
+            }
+        }
+
+        window.renderList = function() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const tbody = document.getElementById('studentTable');
+            tbody.innerHTML = '';
+
+            // Numeric Sort
+            studentsList.sort((a, b) => a.reg.localeCompare(b.reg, undefined, {numeric: true}));
+
+            let count = 1;
+            studentsList.forEach((s, index) => {
+                if(s.name.toLowerCase().includes(query) || s.reg.toLowerCase().includes(query)) {
+                    tbody.innerHTML += `
+                        <tr id="row-${index}">
+                            <td style="color: #64748b; font-size: 13px;">${count++}</td>
+                            <td id="reg-${index}" style="font-weight:bold; color:#7f5af0;">${s.reg}</td>
+                            <td id="name-${index}">${s.name}</td>
+                            <td style="text-align: right;">
+                                <div id="actions-${index}">
+                                    <button class="btn-edit" onclick="editMode(${index})">Edit</button>
+                                    <button class="btn-del" onclick="deleteStudent(${index})">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+        }
+
+        window.editMode = function(index) {
+            const regTd = document.getElementById(`reg-${index}`);
+            const nameTd = document.getElementById(`name-${index}`);
+            const actionsTd = document.getElementById(`actions-${index}`);
+
+            const oldReg = regTd.innerText;
+            const oldName = nameTd.innerText;
+
+            regTd.innerHTML = `<input type="text" class="edit-input" id="edit-reg-${index}" value="${oldReg}">`;
+            nameTd.innerHTML = `<input type="text" class="edit-input" id="edit-name-${index}" value="${oldName}">`;
+            
+            actionsTd.innerHTML = `
+                <button class="btn-save" onclick="saveEdit(${index})">Save</button>
+                <button class="btn-cancel" onclick="renderList()">Cancel</button>
+            `;
+        }
+
+        window.saveEdit = async function(index) {
+            const newReg = document.getElementById(`edit-reg-${index}`).value.toUpperCase();
+            const newName = document.getElementById(`edit-name-${index}`).value;
+
+            if(!newReg || !newName) return alert("Fields cannot be empty!");
+
+            studentsList[index].reg = newReg;
+            studentsList[index].name = newName;
+
+            await updateFirebase();
+            renderList();
+        }
+
+        window.deleteStudent = async function(index) {
+            if(confirm("DANGER: Are you sure? This will delete the student and their entire history!")) {
+                studentsList.splice(index, 1);
+                await updateFirebase();
+                renderList();
+            }
+        }
+
+        async function updateFirebase() {
+            try {
+                await set(ref(db, `cui_classes/${currentClassId}/students`), studentsList);
+                console.log("Cloud updated!");
+            } catch (e) {
+                alert("Cloud Sync Error: " + e.message);
+            }
+        }
+
+        document.getElementById('search').onkeyup = renderList;
+        window.onload = loadStudents;
+    </script>
+</body>
+</html>

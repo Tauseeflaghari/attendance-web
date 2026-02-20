@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Attendance | CUI</title>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; padding: 10px; }
+        .container { max-width: 700px; margin: auto; }
+        
+        .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        select { padding: 8px; border-radius: 6px; border: 1px solid #334155; background: #020617; color: white; outline: none; width: 60%; }
+        
+        .btn-del { background: #ef4444; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+
+        .white-grid { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        table { width: 100%; border-collapse: collapse; color: #1e293b; font-size: 13px; }
+        th { background: #f1f5f9; border-bottom: 2px solid #cbd5e1; padding: 6px; color: #0f172a; text-align: center; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 4px 8px; text-align: center; }
+        
+        .btn-group { display: flex; justify-content: center; gap: 8px; }
+        .status-circle {
+            width: 28px; height: 28px; border-radius: 50%; border: 1px solid #cbd5e1;
+            background: white; color: #94a3b8; font-weight: 800; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: 0.2s; font-size: 11px;
+        }
+        
+        .btn-p.active { background: #22c55e !important; color: white !important; border-color: #16a34a !important; }
+        .btn-a.active { background: #ef4444 !important; color: white !important; border-color: #dc2626 !important; }
+        .btn-new.active { background: #3b82f6 !important; color: white !important; border-color: #2563eb !important; }
+
+        .btn-update { width: 100%; padding: 12px; background: #fbbf24; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; margin-top: 10px; color: #000; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <a href="teacher_dashboard.html" style="color:#7f5af0; text-decoration:none; font-weight:bold; font-size:14px;">← Back</a>
+            <button class="btn-del" id="delBtn" style="display:none;">DELETE THIS DATE</button>
+        </div>
+
+        <h3 id="classHeader" style="color:#fbbf24; margin: 5px 0;">Edit Attendance</h3>
+        
+        <select id="dateList">
+            <option value="">-- Choose Date to Edit --</option>
+        </select>
+
+        <div class="white-grid" id="editBox" style="display:none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Roll No</th>
+                        <th style="text-align:left;">Student Name</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="ebody"></tbody>
+            </table>
+            <button class="btn-update" id="saveBtn">SAVE RECORDS</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
+    authDomain: "attendance-system-123.firebaseapp.com",
+    projectId: "attendance-system-123",
+    storageBucket: "attendance-system-123.firebasestorage.app",
+    messagingSenderId: "592694519186",
+    appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
+    measurementId: "G-TWE5VVT6ZQ"
+  };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const currentClassId = localStorage.getItem('current_class_id');
+        let students = [];
+        let className = "";
+
+        // Page Load logic
+        window.onload = async function() {
+            if(!currentClassId) {
+                window.location.href = 'class_management.html';
+                return;
+            }
+
+            const classRef = ref(db, `cui_classes/${currentClassId}`);
+            const snapshot = await get(classRef);
+
+            if(snapshot.exists()) {
+                const data = snapshot.val();
+                students = data.students || [];
+                className = data.className;
+                document.getElementById('classHeader').innerText = "Edit: " + className;
+
+                // Populate Dropdown
+                let dates = new Set();
+                students.forEach(s => {
+                    if(s.history) s.history.forEach(h => dates.add(h.date));
+                });
+                
+                let dropdown = document.getElementById('dateList');
+                dates.forEach(d => {
+                    let opt = document.createElement('option');
+                    opt.value = d; opt.innerText = d;
+                    dropdown.appendChild(opt);
+                });
+            }
+        };
+
+        window.loadData = function() {
+            let d = document.getElementById('dateList').value;
+            if(!d) {
+                document.getElementById('editBox').style.display = 'none';
+                document.getElementById('delBtn').style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('editBox').style.display = 'block';
+            document.getElementById('delBtn').style.display = 'block';
+            
+            students.sort((a, b) => a.reg.localeCompare(b.reg, undefined, {numeric: true}));
+
+            let h = '';
+            students.forEach((s, i) => {
+                let rec = s.history ? s.history.find(x => x.date == d) : null;
+                let isNew = !rec;
+                let currentStatus = rec ? rec.status : 'P'; 
+                let blueClass = isNew ? 'btn-new active' : '';
+
+                h += `<tr id="row${i}" data-s="${currentStatus}">
+                    <td style="color:#7f5af0; font-weight:bold;">${s.reg}</td>
+                    <td style="text-align:left;">${s.name}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button id="p${i}" class="status-circle btn-p ${!isNew && currentStatus=='P' ? 'active' : blueClass}" onclick="changeStatus(${i},'P')">P</button>
+                            <button id="a${i}" class="status-circle btn-a ${!isNew && currentStatus=='A' ? 'active' : ''}" onclick="changeStatus(${i},'A')">A</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+            document.getElementById('ebody').innerHTML = h;
+        };
+
+        window.changeStatus = function(i, s) {
+            document.getElementById('p' + i).classList.remove('active', 'btn-new');
+            document.getElementById('a' + i).classList.remove('active');
+            
+            if(s === 'P') document.getElementById('p' + i).classList.add('active');
+            else document.getElementById('a' + i).classList.add('active');
+
+            document.getElementById('row' + i).setAttribute('data-s', s);
+        };
+
+        async function deleteDate() {
+            let d = document.getElementById('dateList').value;
+            if(!confirm(`Are you sure you want to delete all records for ${d}?`)) return;
+            
+            students.forEach(s => {
+                if(s.history) {
+                    s.history = s.history.filter(h => h.date !== d);
+                }
+            });
+
+            await set(ref(db, `cui_classes/${currentClassId}/students`), students);
+            location.reload();
+        }
+
+        async function save() {
+            let d = document.getElementById('dateList').value;
+            students.forEach((s, i) => {
+                let row = document.getElementById('row'+i);
+                let newStatus = row.getAttribute('data-s');
+                
+                if(!s.history) s.history = [];
+                let rec = s.history.find(x => x.date == d);
+                
+                if(rec) { rec.status = newStatus; } 
+                else { s.history.push({date: d, status: newStatus}); }
+            });
+
+            try {
+                await set(ref(db, `cui_classes/${currentClassId}/students`), students);
+                alert('Attendance Updated Successfully on Cloud!');
+                location.href = 'teacher_dashboard.html';
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+        }
+
+        document.getElementById('dateList').onchange = loadData;
+        document.getElementById('delBtn').onclick = deleteDate;
+        document.getElementById('saveBtn').onclick = save;
+    </script>
+</body>
+</html>
