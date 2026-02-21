@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manage Classes | CUI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Classes | CUI Portal</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { min-height: 100vh; background: #0f172a; color: white; padding: 20px; }
@@ -28,9 +29,8 @@
         /* Class Cards */
         .class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
         .class-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 25px; border-radius: 20px; color: white; transition: 0.3s; position: relative; cursor: pointer; }
-        .class-card:hover { transform: translateY(-5px); border-color: #7f5af0; background: rgba(127, 90, 240, 0.05); }
-        .class-card h3 { color: #7f5af0; margin-bottom: 10px; font-size: 22px; }
-        .class-card p { font-size: 14px; color: #94a3b8; margin: 5px 0; }
+        .class-card:hover { transform: translateY(-5px); border-color: #7f5af0; }
+        .class-card h3 { color: #7f5af0; margin-bottom: 10px; }
         
         .btn-delete-class { position: absolute; top: 15px; right: 15px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: bold; }
     </style>
@@ -41,13 +41,13 @@
     <div class="header">
         <div>
             <h1 style="color: #7f5af0;">CUI Portal</h1>
-            <p style="color: #64748b; font-size: 14px;">Class Management</p>
+            <p style="color: #64748b; font-size: 14px;">Class Management Dashboard</p>
         </div>
-        <button class="btn-create" id="openModalBtn">+ Create New Class</button>
+        <button class="btn-create" onclick="window.openModal()">+ Create New Class</button>
     </div>
 
     <div id="classGrid" class="class-grid">
-        <p style="text-align: center; width: 100%;">Loading classes...</p>
+        <p style="text-align: center; width: 100%;">Checking Firebase...</p>
     </div>
 </div>
 
@@ -70,8 +70,8 @@
         <div id="timeInputs"></div>
 
         <div style="display:flex; gap:10px; margin-top:25px;">
-            <button class="btn-create" style="flex:2;" id="confirmCreateBtn">Confirm & Create</button>
-            <button id="closeModalBtn" style="flex:1; background:transparent; color:#94a3b8; border:none; cursor:pointer; font-weight:bold;">Cancel</button>
+            <button class="btn-create" style="flex:2;" onclick="window.saveClassToFirebase()">Confirm & Create</button>
+            <button onclick="window.closeModal()" style="flex:1; background:transparent; color:#94a3b8; border:none; cursor:pointer;">Cancel</button>
         </div>
     </div>
 </div>
@@ -96,49 +96,20 @@
     let selectedDays = [];
     let lockedSchedules = {};
 
-    // --- Core Functions ---
-
-    async function fetchClasses() {
-        const classRef = ref(db, 'cui_classes');
-        const snapshot = await get(classRef);
-        const grid = document.getElementById('classGrid');
-        grid.innerHTML = '';
-
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            Object.keys(data).forEach(id => {
-                const c = data[id];
-                const daysText = c.schedule.map(s => s.day.substring(0,3)).join(', ');
-                grid.innerHTML += `
-                    <div class="class-card" onclick="enterClass('${id}')">
-                        <button class="btn-delete-class" onclick="deleteClass(event, '${id}')">Delete</button>
-                        <h3>${c.className}</h3>
-                        <p><strong>Room:</strong> ${c.room}</p>
-                        <p><strong>Days:</strong> ${daysText}</p>
-                        <p style="margin-top:10px; color:#7f5af0; font-size:12px; font-weight:bold;">OPEN DASHBOARD →</p>
-                    </div>`;
-            });
-        } else {
-            grid.innerHTML = `<p style="text-align:center; color:#64748b; grid-column:1/-1;">No classes found.</p>`;
-        }
-    }
-
-    // Modal Control
-    document.getElementById('openModalBtn').onclick = () => {
+    // --- Modal Logic ---
+    window.openModal = () => {
         document.getElementById('classModal').style.display = 'flex';
         selectedDays = [];
         lockedSchedules = {};
         document.querySelectorAll('.day-box').forEach(b => b.classList.remove('selected'));
         document.getElementById('timeInputs').innerHTML = '';
-        document.getElementById('className').value = '';
-        document.getElementById('roomNo').value = '';
     };
 
-    document.getElementById('closeModalBtn').onclick = () => {
+    window.closeModal = () => {
         document.getElementById('classModal').style.display = 'none';
     };
 
-    // Toggle Day Box logic
+    // --- Day Selection ---
     document.querySelectorAll('.day-box').forEach(box => {
         box.onclick = function() {
             const day = this.dataset.day;
@@ -160,34 +131,85 @@
             const isLocked = lockedSchedules[day];
             container.innerHTML += `
                 <div class="time-entry">
-                    <div style="display:flex; justify-content:space-between;">
-                        <strong style="color:#7f5af0; font-size:12px;">${day}</strong>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="color:#7f5af0; font-size:12px;">${day} Schedule</strong>
                         <button class="set-btn ${isLocked ? 'locked' : ''}" onclick="window.lockTime('${day}')">
                             ${isLocked ? '✓ SET' : 'CONFIRM TIME'}
                         </button>
                     </div>
-                    <div style="display:flex; gap:10px; align-items:center; margin-top:5px;">
+                    <div style="display:flex; gap:10px; margin-top:5px;">
                         <input type="time" id="from-${day}" ${isLocked ? 'disabled' : ''} value="${isLocked ? lockedSchedules[day].from : ''}">
-                        <span style="color:#64748b; font-size:12px;">to</span>
                         <input type="time" id="to-${day}" ${isLocked ? 'disabled' : ''} value="${isLocked ? lockedSchedules[day].to : ''}">
                     </div>
                 </div>`;
         });
     }
 
-    // --- Global Window Functions (for HTML onclick access) ---
-
+    // --- Confirm Time Logic ---
     window.lockTime = (day) => {
-        const fromInput = document.getElementById(`from-${day}`);
-        const toInput = document.getElementById(`to-${day}`);
-        const from = fromInput.value;
-        const to = toInput.value;
-        
-        if(!from || !to) return alert("Please select time first!");
+        const from = document.getElementById(`from-${day}`).value;
+        const to = document.getElementById(`to-${day}`).value;
+        if(!from || !to) return alert("Select both From and To times!");
         
         lockedSchedules[day] = { from, to };
         renderTimeInputs();
     };
+
+    // --- Save Logic ---
+    window.saveClassToFirebase = async () => {
+        const name = document.getElementById('className').value.trim();
+        const room = document.getElementById('roomNo').value.trim();
+
+        if(!name || !room) return alert("Fill Name and Room!");
+        if(selectedDays.length === 0) return alert("Select at least one day!");
+        if(Object.keys(lockedSchedules).length !== selectedDays.length) {
+            return alert("You must click 'CONFIRM TIME' (SET button) for every selected day!");
+        }
+
+        const classId = "class_" + Date.now();
+        const scheduleArray = Object.keys(lockedSchedules).map(day => ({
+            day, from: lockedSchedules[day].from, to: lockedSchedules[day].to
+        }));
+
+        try {
+            await set(ref(db, `cui_classes/${classId}`), {
+                className: name.toUpperCase(),
+                room: room,
+                schedule: scheduleArray
+            });
+            alert("Success! Class Created.");
+            window.closeModal();
+            fetchClasses();
+        } catch (err) {
+            alert("Error: " + err.message);
+        }
+    };
+
+    // --- Fetch & Display ---
+    async function fetchClasses() {
+        const grid = document.getElementById('classGrid');
+        try {
+            const snapshot = await get(ref(db, 'cui_classes'));
+            grid.innerHTML = '';
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                Object.keys(data).forEach(id => {
+                    const c = data[id];
+                    grid.innerHTML += `
+                        <div class="class-card" onclick="window.enterClass('${id}')">
+                            <button class="btn-delete-class" onclick="window.deleteClass(event, '${id}')">Delete</button>
+                            <h3>${c.className}</h3>
+                            <p><strong>Room:</strong> ${c.room}</p>
+                            <p style="margin-top:10px; font-size:12px; font-weight:bold; color:#7f5af0;">DASHBOARD →</p>
+                        </div>`;
+                });
+            } else {
+                grid.innerHTML = '<p style="grid-column:1/-1; text-align:center;">No classes found.</p>';
+            }
+        } catch (e) {
+            grid.innerHTML = '<p>Error loading data. Check Firebase Rules.</p>';
+        }
+    }
 
     window.enterClass = (id) => {
         localStorage.setItem('current_class_id', id);
@@ -196,57 +218,12 @@
 
     window.deleteClass = async (e, id) => {
         e.stopPropagation();
-        if(confirm("Confirm Delete? This cannot be undone.")) {
-            try {
-                await remove(ref(db, `cui_classes/${id}`));
-                fetchClasses();
-            } catch (err) {
-                alert("Error deleting: " + err.message);
-            }
-        }
-    };
-
-    // --- Create Class Action ---
-
-    document.getElementById('confirmCreateBtn').onclick = async () => {
-        const nameInput = document.getElementById('className');
-        const roomInput = document.getElementById('roomNo');
-        const name = nameInput.value.trim();
-        const room = roomInput.value.trim();
-        
-        if(!name || !room) return alert("Class Name and Room are required!");
-        if(selectedDays.length === 0) return alert("Please select at least one day!");
-        
-        // Check if all selected days are "Set"
-        if(Object.keys(lockedSchedules).length !== selectedDays.length) {
-            return alert("Please click the 'CONFIRM TIME' button for all selected days!");
-        }
-
-        const classId = "class_" + Date.now();
-        const scheduleArray = Object.keys(lockedSchedules).map(day => ({
-            day, 
-            from: lockedSchedules[day].from, 
-            to: lockedSchedules[day].to
-        }));
-
-        const newClass = {
-            className: name.toUpperCase(),
-            room: room,
-            schedule: scheduleArray,
-            students: []
-        };
-
-        try {
-            await set(ref(db, `cui_classes/${classId}`), newClass);
-            document.getElementById('classModal').style.display = 'none';
+        if(confirm("Delete this class permanently?")) {
+            await remove(ref(db, `cui_classes/${id}`));
             fetchClasses();
-            alert("Class Created Successfully!");
-        } catch (err) {
-            alert("Firebase Error: " + err.message);
         }
     };
 
-    // Load initial data
     window.onload = fetchClasses;
 </script>
 </body>
