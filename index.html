@@ -45,16 +45,16 @@
         import { getDatabase } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         // Firebase Configuration (Aapne apne Firebase Console se ye details replace karni hain)
-        const firebaseConfig = {
+const firebaseConfig = {
     apiKey: "AIzaSyAL_IfQW5X3IuHU7ClkBQhRjTWEceF5Aio",
     authDomain: "attendance-system-123.firebaseapp.com",
+    databaseURL: "https://attendance-system-123-default-rtdb.firebaseio.com/", // Ye line add karein
     projectId: "attendance-system-123",
     storageBucket: "attendance-system-123.firebasestorage.app",
     messagingSenderId: "592694519186",
     appId: "1:592694519186:web:e4cc56fc44afd137770d4b",
     measurementId: "G-TWE5VVT6ZQ"
-  };
-
+};
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
